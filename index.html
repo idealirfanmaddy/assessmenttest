@@ -379,8 +379,9 @@
     <div class="yh-score" id="yh-final-score">0 / 15</div>
     <p id="yh-final-points" style="font-size:13px; color:var(--tan); font-weight:600; margin:0 0 10px;">0 pts</p>
     <div class="yh-send-card">
-      <p><b>One last step:</b> send your results to your tutor. A form opens with your results filled in. Just tap <b>Submit</b>.</p>
-      <button class="yh-btn yh-btn-primary" id="yh-send">Send results to tutor</button>
+      <p><b>One last step:</b> save your results file, then upload it to the <b>Vocab Hunt</b> assignment on Blackboard. Please don't open or edit the file. Changes are detected.</p>
+      <button class="yh-btn yh-btn-primary" id="yh-send">Save my results file</button>
+      <button class="yh-btn yh-btn-ghost yh-hidden" id="yh-share" style="margin-top:8px; color:var(--forest); border-color:var(--sage);">Share file (e.g. to Blackboard app)</button>
       <div id="yh-send-status"></div>
     </div>
     <p style="font-size:13.5px; color:#5a6a60; margin:0 0 14px;">Here's how every target matched up.</p>
@@ -391,15 +392,6 @@
 
 <script>
 (function(){
-  // ================= TUTOR SETUP =================
-  // Your Microsoft Form's pre-filled link. When making it, type these placeholders as the answers:
-  //   Player -> zzPLAYER   Terms matched -> zzMATCHED   First-try correct -> zzFIRST
-  //   Hints used -> zzHINTS   Time used -> zzTIME   Missed shots -> zzMISSES
-  //   Term 1 ... Term 15 -> zzT01 ... zzT15   (optional) Check code -> zzCHECK
-  // If the form has no Check code question, the code is added to the end of "Time used" instead.
-  const FORM_PREFILL_URL = 'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=SJPOFSq-K0aPwOF2WpsgStvRW3Wiw6FBl63ESQWQmf9UNFNDVVFIMUE2VzhYVkJTWTkxUzBVNFFUVC4u&rd9f254d7abc348529e0779a006418ff7=zzPLAYER&ra8da75b4a339445286337589786e5e1a=zzMATCHED&r1868d530d6424987bbc504cfc1474074=zzFIRST&r9dbb68ca0fda46cbb6e1a1f5b4d3302c=zzHINTS&rf01a0094549048ebbcaf3ffcc56067ef=zzTIME&rff14c922ba3849e0a5cff1e545f9bb29=zzMISSES&r958812e44a514235be1295313bb607b5=zzT01&r2257f60d248041608eb5b63d4448b55f=zzT02&r7852b2ce3de44b92b98b66b57f280071=zzT03&r7b7244d1605642339f489b1e7350726a=zzT04&ra37526a156d04b819e946c6b69a3b147=zzT05&rcb3a7d6c781c47829638223f04f128e8=zzT06&rfe6c599bca8d421eaa8b86a0dfd2df4a=zzT07&r529f23356a4a45fcb992d8b6ce69a117=zzT08&r92eb356eacd940729589cde46e77330c=zzT09&r3626654468d44de2b558a3c72582fb06=zzT10&rfa20a255a6b84beda9ba0b8757bb8819=zzT11&r4411ad4c0b3f48d3975d9d0f4c0af2e6=zzT12&r277a135f8e2c4d1a8b8fe3a195acfd5c=zzT13&rf3bae3a9ad1c4ff69e8ae9da366db9d3=zzT14&re3eae1904e464f81af4a22956b818c91=zzT15';
-  // ===============================================
-
   // ---- Check code: any change to the submitted results makes this code stop matching ----
   // (The same function lives in tutor-dashboard.html. If you change CHECK_SALT, change it in both files.)
   const CHECK_SALT = 'yh-mec904-archery';
@@ -1167,6 +1159,7 @@
     $('yh-final-score').textContent = foundN + ' / ' + TERMS.length;
     document.querySelector('#yh-summary h2').textContent = 'Nice hunting, ' + state.player + '!';
     $('yh-send-status').textContent = '';
+    shareBtn.classList.add('yh-hidden');
     $('yh-final-points').textContent = state.score + ' pts \u00b7 ' + state.bullseyes + ' bullseye' + (state.bullseyes === 1 ? '' : 's');
     sfxComplete(); buzz([30,50,30,50,60]);
     confettiBurst(foundN === TERMS.length ? 60 : 26, foundN === TERMS.length);
@@ -1218,31 +1211,48 @@
             'Time used: ' + r.TIME, 'Missed shots: ' + r.MISSES]
       .concat(TERMS.map(t => r['T' + String(t.num).padStart(2,'0')])).join('\n');
   }
-  function buildFormUrl(r){
-    let url = FORM_PREFILL_URL;
-    Object.keys(r).forEach(k => {
-      // placeholders are matched without caring about capital letters (zzPLAYER = zzPlayer)
-      url = url.replace(new RegExp('=zz' + k + '(?=&|$)', 'gi'), '=' + encodeURIComponent(r[k]));
-    });
-    return url;
-  }
-  const sendBtn = $('yh-send');
-  sendBtn.addEventListener('click', async () => {
+  function stamp(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+  function buildResultsFile(){
     const r = collectResults();
+    const saved = new Date(state.endedAt || Date.now());
     const code = checkCode(r);
-    if (/=zzCHECK(?=&|$)/i.test(FORM_PREFILL_URL)) r.CHECK = code;
-    else r.TIME = r.TIME + ' | check ' + code;
-    const status = $('yh-send-status');
-    if (!/^https:\/\//.test(FORM_PREFILL_URL)){
-      try { await navigator.clipboard.writeText(resultsAsText(r)); status.textContent = "Your tutor hasn't linked a form yet, so your results were copied. Please pass them to your tutor."; }
-      catch (e){ status.textContent = "Your tutor hasn't linked a form yet. Please show this screen to your tutor."; }
-      status.style.color = 'var(--coral)';
-      return;
-    }
-    window.open(buildFormUrl(r), '_blank', 'noopener');
+    const text = [
+      'Assessment Vocab AR Hunt - results',
+      'Upload this file to the Vocab Hunt assignment on Blackboard. Please do not edit it: changes are detected.',
+      '',
+      'Saved: ' + stamp(saved),
+      resultsAsText(r),
+      '',
+      'Check code: ' + code,
+      '',
+      'DATA:' + JSON.stringify({ v: 1, saved: saved.toISOString(), check: code, fields: r }),
+      '',
+    ].join('\n');
+    const safeName = (state.player || 'student').replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 30) || 'student';
+    const name = 'vocab-hunt_' + safeName + '_' + stamp(saved).replace(/[-: ]/g, '').replace(/^(\d{8})/, '$1-') + '.txt';
+    return { name, text };
+  }
+  const sendBtn = $('yh-send'), shareBtn = $('yh-share');
+  function canShareFiles(){
+    try { return !!(navigator.canShare && navigator.canShare({ files: [new File(['x'], 'x.txt', { type: 'text/plain' })] })); } catch (e){ return false; }
+  }
+  sendBtn.addEventListener('click', () => {
+    const { name, text } = buildResultsFile();
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     state.sent = true;
+    const status = $('yh-send-status');
     status.style.color = 'var(--sage)';
-    status.textContent = 'Form opened in a new tab. Tap Submit there without changing anything. Edited results are flagged to your tutor.';
+    status.textContent = 'Saved as ' + name + ' in your Downloads (on iPhone: the Files app). Now upload it to the Vocab Hunt assignment on Blackboard.';
+    if (canShareFiles()) shareBtn.classList.remove('yh-hidden');
+  });
+  shareBtn.addEventListener('click', async () => {
+    const { name, text } = buildResultsFile();
+    try { await navigator.share({ files: [new File([text], name, { type: 'text/plain' })], title: 'Vocab Hunt results' }); }
+    catch (e){ /* student closed the share sheet */ }
   });
 
   function showNotice(msg){
